@@ -25,7 +25,7 @@ Sources:
 - [ ] `REPO-001`: Decide final package structure, language, framework, package manager, and production module layout for this repo.
 - [x] `REPO-002`: Migrate the secrets service from the JavaScript ESM bootstrap to Python while preserving or intentionally superseding current `SessionSecrets` lifecycle behavior.
 - [x] `REPO-002`: Port or replace existing `node:test` coverage with equivalent Python tests and document the Python package layout and local test commands.
-- [ ] Migration gate: Do not continue broad new secrets-service feature work until the Python migration is completed or explicitly deferred.
+- [x] Migration gate: Do not continue broad new secrets-service feature work until the Python migration is completed or explicitly deferred.
 - [ ] `AUTH-004`: Add production `SessionSecrets` persistence with partition/sort key shape from the LLD.
 - [ ] `AUTH-004`: Add DynamoDB repository with TTL support.
 - [ ] `AUTH-004`: Ensure expired, deleted, and missing secrets return the final typed re-enter-key error used by orchestration.
