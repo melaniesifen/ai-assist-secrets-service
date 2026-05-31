@@ -49,6 +49,9 @@ Planned AWS and provider integrations should wrap the existing domain contracts:
 - HTTP handlers for `POST /provider-secrets/session`, `GET /provider-secrets/session/{provider}/status`, and `DELETE /provider-secrets/session/{provider}`.
 - Internal decrypt-by-reference handler restricted to orchestration/provider call paths.
 
+## Task Breakdown
+
+Implementation tasks are tracked in [TASKS.md](TASKS.md). Update the checkboxes there in the same change that implements or verifies a task.
 
 ## Testing And Coverage
 
