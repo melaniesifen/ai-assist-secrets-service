@@ -12,12 +12,13 @@
 - Use injected clocks, encryption, and hashing/fingerprinting boundaries.
 - Fingerprints must be non-reversible and safe for metadata display.
 - Keep persistent remembered-key behavior out of MVP unless explicitly requested and designed separately.
+- Keep the Python package dependency-free unless a documented repo-local dependency/tooling manifest is added.
 - Add tests for create, resolve, expire, delete, decrypt failure, wrong tenant/user/provider, and metadata-only status responses.
 
 ## Commands
 
-- Run tests with `node --test`.
-- `npm` may not be available in this environment; prefer the direct Node command.
+- Run tests with `python3 -m unittest`.
+- Do not globally install Python tools. If future work needs Python libraries or tooling, add repo-local manifests such as `pyproject.toml` and document install/test commands.
 
 ## Review Notes
 

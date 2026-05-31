@@ -1,8 +1,8 @@
 # ai-assist-secrets-service
 
-Domain-layer bootstrap for short-lived provider API key `SessionSecrets`.
+Domain-layer Python package for short-lived provider API key `SessionSecrets`.
 
-This repo intentionally has no runtime dependencies and no AWS or provider network integration yet. The current code models the security-sensitive lifecycle with injected clock, id generation, encryption, and fingerprinting interfaces.
+This repo intentionally has no runtime dependencies beyond the Python standard library and no AWS or provider network integration yet. The current code models the security-sensitive lifecycle with injected clock, id generation, encryption, and fingerprinting interfaces.
 
 ## Current Boundary
 
@@ -26,10 +26,11 @@ The service does not own:
 
 ## Domain Modules
 
-- `src/errors.js`: typed `SecretError` values with stable error codes and HTTP status.
-- `src/fingerprint.js`: dependency-light HMAC-SHA-256 fingerprint helper.
-- `src/sessionSecrets.js`: in-memory repository and domain service.
-- `src/index.js`: public exports.
+- `ai_assist_secrets_service/errors.py`: typed `SecretError` values with stable error codes and HTTP status.
+- `ai_assist_secrets_service/fingerprint.py`: dependency-light HMAC-SHA-256 fingerprint helper.
+- `ai_assist_secrets_service/session_secrets.py`: in-memory repository and domain service.
+- `ai_assist_secrets_service/__init__.py`: public exports.
+- `tests/test_session_secrets.py`: stdlib `unittest` lifecycle coverage.
 
 ## Security Invariants
 
@@ -55,18 +56,12 @@ Implementation tasks are tracked in [TASKS.md](TASKS.md). Update the checkboxes 
 
 ## Testing And Coverage
 
-Run the unit tests with either command:
+Run the unit tests with:
 
 ```sh
-node --test
-npm test
+python3 -m unittest
 ```
 
-View the built-in coverage report in the terminal:
+No package install is required for local tests. This repo does not commit a Python dependency or build manifest yet because the migrated behavior is covered by stdlib-only code run from the repo root.
 
-```sh
-node --experimental-test-coverage --test
-npm run coverage
-```
-
-The coverage command uses Node's built-in test runner and prints a text report. If later tooling writes HTML, LCOV, TAP, JUnit, or build output, those generated paths are ignored by `.gitignore`.
+Coverage tooling is not committed yet because the local migration intentionally uses stdlib-only tests. If coverage tooling is added later, keep generated HTML, LCOV, XML, and cache output ignored.

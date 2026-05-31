@@ -1,5 +1,13 @@
 prompts/
 feedback/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
 node_modules/
 coverage/
 .coverage/
