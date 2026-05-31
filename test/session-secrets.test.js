@@ -5,6 +5,7 @@ import {
   DEFAULT_SESSION_SECRET_TTL_MS,
   InMemorySessionSecretRepository,
   SECRET_ERROR_CODES,
+  SecretError,
   SESSION_SECRET_STATUS,
   SESSION_SECRET_VALIDATION_STATUS,
   SessionSecretsService,
@@ -242,6 +243,157 @@ describe("SessionSecretsService", () => {
       SECRET_ERROR_CODES.SECRET_DECRYPT_FAILED,
       500
     );
+  });
+
+  it("returns the newest matching secret when multiple active records exist", () => {
+    const mutableNow = { value: BASE_TIME };
+    const { service } = createFixture({ clock: () => mutableNow.value });
+    service.createSessionSecret({
+      identity: IDENTITY,
+      provider: "openai",
+      secretValue: "sk-first-provider-key"
+    });
+    mutableNow.value = new Date(BASE_TIME.getTime() + 1000);
+    const latest = service.createSessionSecret({
+      identity: IDENTITY,
+      provider: "openai",
+      secretValue: "sk-second-provider-key"
+    });
+
+    const status = service.getSessionSecretStatus({ identity: IDENTITY, provider: "openai" });
+
+    assert.equal(status.secretId, latest.secretId);
+  });
+
+  it("rejects missing references without exposing cross-tenant existence", () => {
+    const { service } = createFixture();
+
+    assertSecretError(
+      () => service.resolveSessionSecret({ identity: IDENTITY, provider: "openai" }),
+      SECRET_ERROR_CODES.PROVIDER_SECRET_NOT_FOUND,
+      403
+    );
+    assertSecretError(
+      () =>
+        service.expireSessionSecret({
+          identity: IDENTITY,
+          provider: "openai",
+          secretId: "missing-secret"
+        }),
+      SECRET_ERROR_CODES.PROVIDER_SECRET_NOT_FOUND,
+      403
+    );
+    assertSecretError(
+      () =>
+        service.deleteSessionSecret({
+          identity: IDENTITY,
+          provider: "openai",
+          secretId: "missing-secret"
+        }),
+      SECRET_ERROR_CODES.PROVIDER_SECRET_NOT_FOUND,
+      403
+    );
+  });
+
+  it("validates identity and secret reference inputs before lookup", () => {
+    const { service } = createFixture();
+    const metadata = service.createSessionSecret({
+      identity: IDENTITY,
+      provider: "openai",
+      secretValue: "sk-test-provider-key"
+    });
+
+    assertAuthzDenied(() =>
+      service.getSessionSecretStatus({
+        identity: null,
+        provider: "openai"
+      })
+    );
+    assertSecretError(
+      () =>
+        service.decryptForProviderCall({
+          identity: IDENTITY,
+          provider: "openai",
+          secretId: " "
+        }),
+      SECRET_ERROR_CODES.VALIDATION_FAILED,
+      400
+    );
+    assertAuthzDenied(() =>
+      service.expireSessionSecret({
+        identity: { tenantId: "tenant-1", userId: "user-2" },
+        provider: "openai",
+        secretId: metadata.secretId
+      })
+    );
+  });
+
+  it("validates constructor dependencies and fingerprint key material", () => {
+    const { repository, encryptor } = createFixture();
+    const fingerprintHasher = createHmacFingerprintHasher({
+      key: "test-fingerprint-key-material"
+    });
+
+    assert.throws(
+      () =>
+        new SessionSecretsService({
+          encryptor,
+          fingerprintHasher,
+          idGenerator: () => "secret-1"
+        }),
+      /repository is required/
+    );
+    assert.throws(
+      () =>
+        new SessionSecretsService({
+          repository,
+          encryptor: { encrypt() {} },
+          fingerprintHasher,
+          idGenerator: () => "secret-1"
+        }),
+      /encryptor with encrypt and decrypt methods is required/
+    );
+    assert.throws(
+      () =>
+        new SessionSecretsService({
+          repository,
+          encryptor,
+          fingerprintHasher: {},
+          idGenerator: () => "secret-1"
+        }),
+      /fingerprintHasher\.fingerprint is required/
+    );
+    assert.throws(
+      () =>
+        new SessionSecretsService({
+          repository,
+          encryptor,
+          fingerprintHasher
+        }),
+      /idGenerator is required/
+    );
+    assert.throws(
+      () => createHmacFingerprintHasher({ key: "short" }),
+      /fingerprint key must be at least 16 characters/
+    );
+  });
+
+  it("formats typed errors as stable response envelopes", () => {
+    const error = new SecretError({
+      code: SECRET_ERROR_CODES.VALIDATION_FAILED,
+      message: "Bad request.",
+      status: 400,
+      details: { field: "provider" }
+    });
+
+    assert.deepEqual(error.toResponse(), {
+      error: {
+        code: SECRET_ERROR_CODES.VALIDATION_FAILED,
+        message: "Bad request.",
+        details: { field: "provider" }
+      },
+      status: 400
+    });
   });
 });
 

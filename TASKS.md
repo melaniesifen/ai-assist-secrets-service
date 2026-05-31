@@ -40,7 +40,7 @@ Sources:
 
 ## Quality And Production Tasks
 
-- [ ] Raise line coverage to at least 95%.
+- [x] Raise line coverage to at least 95%.
 - [ ] Add explicit persistent remembered-key design only if product scope requires it.
 - [ ] Add tenant-managed provider credential support if needed.
 - [ ] Add secret rotation and deletion UX contract support.
