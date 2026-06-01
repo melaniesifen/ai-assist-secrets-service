@@ -9,15 +9,15 @@ Sources:
 
 ## Completed Bootstrap
 
-- [x] Create dependency-light ESM package for session-secret domain logic.
+- [x] Initially bootstrap dependency-light ESM session-secret domain logic; superseded by the completed Python migration in `REPO-002`.
 - [x] `AUTH-004`: Implement `SessionSecrets` lifecycle domain logic scoped by `tenantId`, `userId`, and provider.
 - [x] `AUTH-004`: Store encrypted secret material behind an injected encryption boundary.
 - [x] `AUTH-004`: Add non-reversible fingerprint helper.
 - [x] `AUTH-004`: Enforce 8-hour default TTL and read-time expiry.
 - [x] `AUTH-004`: Add metadata-only create, status, expire, and delete responses.
 - [x] `AUTH-004`: Add internal decrypt-by-reference behavior for authorized provider call paths.
-- [x] Add unit tests using `node:test`.
-- [x] Document tests and coverage commands in `README.md`.
+- [x] Initially add unit tests using `node:test`; superseded by equivalent Python `unittest` coverage in `REPO-002`.
+- [x] Document current Python test commands in `README.md`.
 - [x] Ignore local prompts, feedback, coverage output, dependencies, and build artifacts.
 
 ## Pending Architecture Tasks
