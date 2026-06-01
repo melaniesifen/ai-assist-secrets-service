@@ -26,11 +26,12 @@ The service does not own:
 
 ## Domain Modules
 
-- `ai_assist_secrets_service/errors.py`: typed `SecretError` values with stable error codes and HTTP status.
-- `ai_assist_secrets_service/fingerprint.py`: dependency-light HMAC-SHA-256 fingerprint helper.
-- `ai_assist_secrets_service/session_secrets.py`: in-memory repository and domain service.
-- `ai_assist_secrets_service/__init__.py`: public exports.
+- `src/ai_assist_secrets_service/errors.py`: typed `SecretError` values with stable error codes and HTTP status.
+- `src/ai_assist_secrets_service/fingerprint.py`: dependency-light HMAC-SHA-256 fingerprint helper.
+- `src/ai_assist_secrets_service/session_secrets.py`: in-memory repository and domain service.
+- `src/ai_assist_secrets_service/__init__.py`: public exports.
 - `tests/test_session_secrets.py`: stdlib `unittest` lifecycle coverage.
+- `pyproject.toml`: package metadata and `src/` package discovery.
 
 ## Security Invariants
 
@@ -59,9 +60,17 @@ Implementation tasks are tracked in [TASKS.md](TASKS.md). Update the checkboxes 
 Run the unit tests with:
 
 ```sh
-python3 -m unittest
+PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
-No package install is required for local tests. This repo does not commit a Python dependency or build manifest yet because the migrated behavior is covered by stdlib-only code run from the repo root.
+Compile the package and tests with:
+
+```sh
+PYTHONPATH=src python3 -m compileall src tests
+```
+
+No package install is required for local tests. The committed `pyproject.toml`
+documents the package name and `src/` package discovery; runtime and test code
+remain stdlib-only.
 
 Coverage tooling is not committed yet because the local migration intentionally uses stdlib-only tests. If coverage tooling is added later, keep generated HTML, LCOV, XML, and cache output ignored.

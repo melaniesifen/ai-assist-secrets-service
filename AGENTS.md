@@ -17,8 +17,9 @@
 
 ## Commands
 
-- Run tests with `python3 -m unittest`.
-- Do not globally install Python tools. If future work needs Python libraries or tooling, add repo-local manifests such as `pyproject.toml` and document install/test commands.
+- Run tests with `PYTHONPATH=src python3 -m unittest discover -s tests`.
+- Run compile checks with `PYTHONPATH=src python3 -m compileall src tests`.
+- Do not globally install Python tools. If future work needs Python libraries or tooling beyond the current stdlib-only package, add repo-local manifests and document install/test commands.
 
 ## Review Notes
 

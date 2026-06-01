@@ -18,11 +18,13 @@ Sources:
 - [x] `AUTH-004`: Add internal decrypt-by-reference behavior for authorized provider call paths.
 - [x] Initially add unit tests using `node:test`; superseded by equivalent Python `unittest` coverage in `REPO-002`.
 - [x] Document current Python test commands in `README.md`.
+- [x] Standardize Python package layout to `src/ai_assist_secrets_service/` with tests in `tests/`.
+- [x] Add `pyproject.toml` package discovery for the `src/` layout.
 - [x] Ignore local prompts, feedback, coverage output, dependencies, and build artifacts.
 
 ## Pending Architecture Tasks
 
-- [ ] `REPO-001`: Decide final package structure, language, framework, package manager, and production module layout for this repo.
+- [x] `REPO-001`: Decide final package structure, language, framework, package manager, and production module layout for this repo.
 - [x] `REPO-002`: Migrate the secrets service from the JavaScript ESM bootstrap to Python while preserving or intentionally superseding current `SessionSecrets` lifecycle behavior.
 - [x] `REPO-002`: Port or replace existing `node:test` coverage with equivalent Python tests and document the Python package layout and local test commands.
 - [x] Migration gate: Do not continue broad new secrets-service feature work until the Python migration is completed or explicitly deferred.
