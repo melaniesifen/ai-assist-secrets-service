@@ -19,6 +19,21 @@ class SessionSecretValidationStatus:
     NOT_VALIDATED = "not_validated"
     VALID = "valid"
     INVALID = "invalid"
+    VALIDATION_FAILED = "validation_failed"
+
+
+class ProviderSecretReadinessStatus:
+    MISSING = "missing"
+    PENDING_VALIDATION = "pending_validation"
+    VALID = "valid"
+    INVALID = "invalid"
+    EXPIRED = "expired"
+    VALIDATION_FAILED = "validation_failed"
+
+
+class SetupErrorCategories:
+    AUTHENTICATION = "AUTHENTICATION"
+    DEPENDENCY = "DEPENDENCY"
 
 
 DEFAULT_SESSION_SECRET_TTL_MS = 8 * 60 * 60 * 1000
@@ -32,6 +47,7 @@ VALIDATION_STATUS_VALUES = {
     SessionSecretValidationStatus.NOT_VALIDATED,
     SessionSecretValidationStatus.VALID,
     SessionSecretValidationStatus.INVALID,
+    SessionSecretValidationStatus.VALIDATION_FAILED,
 }
 
 
@@ -125,12 +141,20 @@ class SessionSecretsService:
         secret_id = self.id_generator()
         _require_non_empty_string(secret_id, "secret_id")
         context = encryption_context(owner, normalized_provider)
+        should_store_ciphertext = normalized_validation_status in {
+            SessionSecretValidationStatus.NOT_VALIDATED,
+            SessionSecretValidationStatus.VALID,
+        }
         record = SessionSecretRecord(
             tenant_id=owner["tenant_id"],
             user_id=owner["user_id"],
             provider=normalized_provider,
             secret_id=secret_id,
-            secret_ciphertext=self.encryptor.encrypt(normalized_secret, context=context),
+            secret_ciphertext=(
+                self.encryptor.encrypt(normalized_secret, context=context)
+                if should_store_ciphertext
+                else None
+            ),
             fingerprint=self.fingerprint_hasher.fingerprint(normalized_secret),
             status=SessionSecretStatus.ACTIVE,
             validation_status=normalized_validation_status,
@@ -161,6 +185,27 @@ class SessionSecretsService:
             **metadata(current, self.clock()),
             "available": current.status == SessionSecretStatus.ACTIVE,
         }
+
+    def get_provider_secret_readiness(self, *, identity, provider):
+        owner = _require_identity(identity)
+        normalized_provider = _require_provider(provider)
+        record = self.repository.find_latest(
+            tenant_id=owner["tenant_id"],
+            user_id=owner["user_id"],
+            provider=normalized_provider,
+        )
+        if record is None:
+            return _provider_secret_readiness(
+                provider=normalized_provider,
+                status=ProviderSecretReadinessStatus.MISSING,
+                error=_provider_secret_error(
+                    code=SecretErrorCodes.PROVIDER_SECRET_NOT_FOUND,
+                    message="Provider key is required.",
+                    http_status=401,
+                ),
+            )
+        current = self.apply_read_time_expiry(record)
+        return _provider_secret_readiness_for_record(current, self.clock())
 
     def resolve_session_secret(self, *, identity, provider):
         owner = _require_identity(identity)
@@ -250,6 +295,10 @@ class SessionSecretsService:
             )
         if current.status != SessionSecretStatus.ACTIVE or current.expires_at <= self.clock():
             raise _expired(current)
+        if current.validation_status != SessionSecretValidationStatus.VALID:
+            raise _not_ready(current)
+        if current.secret_ciphertext is None:
+            raise _not_ready(current)
         return current
 
     def apply_read_time_expiry(self, record):
@@ -285,6 +334,106 @@ def metadata(record, now):
         "lastValidatedAt": _to_iso(record.last_validated_at),
         "expiresAt": _to_iso(record.expires_at),
         "isExpired": record.expires_at <= now,
+    }
+
+
+def _provider_secret_readiness_for_record(record, now):
+    common = {
+        "provider": record.provider,
+        "secretId": record.secret_id,
+        "fingerprint": record.fingerprint,
+        "lastValidatedAt": _to_iso(record.last_validated_at),
+        "expiresAt": _to_iso(record.expires_at),
+    }
+    if record.status == SessionSecretStatus.DELETED:
+        return _provider_secret_readiness(
+            provider=record.provider,
+            status=ProviderSecretReadinessStatus.MISSING,
+            error=_provider_secret_error(
+                code=SecretErrorCodes.PROVIDER_SECRET_NOT_FOUND,
+                message="Provider key is required.",
+                http_status=401,
+            ),
+        )
+    if record.status != SessionSecretStatus.ACTIVE or record.expires_at <= now:
+        return _provider_secret_readiness(
+            **common,
+            status=ProviderSecretReadinessStatus.EXPIRED,
+            error=_provider_secret_error(
+                code=SecretErrorCodes.PROVIDER_SECRET_EXPIRED,
+                message="Provider session secret expired.",
+                http_status=401,
+            ),
+        )
+    if record.validation_status == SessionSecretValidationStatus.VALID:
+        return _provider_secret_readiness(
+            **common,
+            status=ProviderSecretReadinessStatus.VALID,
+        )
+    if record.validation_status == SessionSecretValidationStatus.INVALID:
+        return _provider_secret_readiness(
+            **common,
+            status=ProviderSecretReadinessStatus.INVALID,
+            error=_provider_secret_error(
+                code=SecretErrorCodes.PROVIDER_SECRET_INVALID,
+                message="Provider key validation failed.",
+                http_status=400,
+            ),
+        )
+    if record.validation_status == SessionSecretValidationStatus.VALIDATION_FAILED:
+        return _provider_secret_readiness(
+            **common,
+            status=ProviderSecretReadinessStatus.VALIDATION_FAILED,
+            error=_provider_secret_error(
+                code=SecretErrorCodes.PROVIDER_SECRET_VALIDATION_FAILED,
+                message="Provider key validation could not be completed.",
+                http_status=503,
+                category=SetupErrorCategories.DEPENDENCY,
+                retryable=True,
+            ),
+        )
+    return _provider_secret_readiness(
+        **common,
+        status=ProviderSecretReadinessStatus.PENDING_VALIDATION,
+    )
+
+
+def _provider_secret_readiness(
+    *,
+    provider,
+    status,
+    secretId=None,
+    fingerprint=None,
+    lastValidatedAt=None,
+    expiresAt=None,
+    error=None,
+):
+    return {
+        "provider": provider,
+        "status": status,
+        **({} if secretId is None else {"secretId": secretId}),
+        **({} if fingerprint is None else {"fingerprint": fingerprint}),
+        **({} if lastValidatedAt is None else {"lastValidatedAt": lastValidatedAt}),
+        **({} if expiresAt is None else {"expiresAt": expiresAt}),
+        **({} if error is None else {"error": error}),
+    }
+
+
+def _provider_secret_error(
+    *,
+    code,
+    message,
+    http_status,
+    category=SetupErrorCategories.AUTHENTICATION,
+    retryable=False,
+):
+    return {
+        "code": code,
+        "category": category,
+        "message": message,
+        "retryable": retryable,
+        "httpStatus": http_status,
+        "target": "providerSecret",
     }
 
 
@@ -327,7 +476,7 @@ def _require_validation_status(validation_status):
     if validation_status not in VALIDATION_STATUS_VALUES:
         raise validation_failed(
             "validation_status",
-            "validation_status must be not_validated, valid, or invalid.",
+            "validation_status must be not_validated, valid, invalid, or validation_failed.",
         )
     return validation_status
 
@@ -353,6 +502,29 @@ def _expired(record):
     return SecretError(
         code=SecretErrorCodes.PROVIDER_SECRET_EXPIRED,
         message="Session secret has expired.",
+        status=403,
+        details={"secretId": record.secret_id, "provider": record.provider},
+    )
+
+
+def _not_ready(record):
+    if record.validation_status == SessionSecretValidationStatus.INVALID:
+        return SecretError(
+            code=SecretErrorCodes.PROVIDER_SECRET_INVALID,
+            message="Session secret is not valid.",
+            status=403,
+            details={"secretId": record.secret_id, "provider": record.provider},
+        )
+    if record.validation_status == SessionSecretValidationStatus.VALIDATION_FAILED:
+        return SecretError(
+            code=SecretErrorCodes.PROVIDER_SECRET_VALIDATION_FAILED,
+            message="Session secret validation could not be completed.",
+            status=503,
+            details={"secretId": record.secret_id, "provider": record.provider},
+        )
+    return SecretError(
+        code=SecretErrorCodes.PROVIDER_SECRET_PENDING_VALIDATION,
+        message="Session secret validation is pending.",
         status=403,
         details={"secretId": record.secret_id, "provider": record.provider},
     )

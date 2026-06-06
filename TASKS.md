@@ -22,6 +22,13 @@ Sources:
 - [x] Add `pyproject.toml` package discovery for the `src/` layout.
 - [x] Ignore local prompts, feedback, coverage output, dependencies, and build artifacts.
 
+## Milestone 3 Setup Status
+
+- [x] M3: Add provider-secret readiness metadata for missing, pending validation, valid, invalid, expired, and validation-failed setup states.
+- [x] M3: Enforce read-time expiry in setup readiness responses and clear ciphertext when a record expires.
+- [x] M3: Keep setup readiness responses metadata-only with non-reversible fingerprints and no raw provider keys or ciphertext.
+- [x] M3: Reject internal provider-call decrypt paths unless the session secret is valid and unexpired.
+
 ## Pending Architecture Tasks
 
 - [x] `REPO-001`: Decide final package structure, language, framework, package manager, and production module layout for this repo.
