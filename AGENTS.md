@@ -14,6 +14,7 @@
 - Keep persistent remembered-key behavior out of MVP unless explicitly requested and designed separately.
 - Keep the Python package dependency-free unless a documented repo-local dependency/tooling manifest is added.
 - Add tests for create, resolve, expire, delete, decrypt failure, wrong tenant/user/provider, and metadata-only status responses.
+- Keep tests split by source responsibility where practical; put reused constants, fakes, fixtures, and assertions in `tests/common.py`.
 
 ## Commands
 
