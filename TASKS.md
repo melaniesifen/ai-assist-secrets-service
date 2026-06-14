@@ -42,6 +42,7 @@ Sources:
 - [ ] `AUTH-005`: Add provider-key validation coordination with provider adapters before storing or activating keys.
 - [ ] `AUTH-005`: Ensure failed validation returns a typed validation error without storing raw key material.
 - [ ] `AUTH-005`: Add validation-attempt rate-limit integration.
+- [x] M8-T4.3: Existing `SessionSecrets` BYO provider-key storage remains optional metadata-only fallback; M8 default provider access does not require this path.
 - [ ] `AUTH-006`: Add KMS encrypt/decrypt adapter with tenant, user, provider, and purpose encryption context.
 - [ ] `AUTH-006`: Enforce least-privilege decrypt boundary so only authorized secrets-service paths can decrypt provider `SessionSecrets`.
 - [ ] `AUTH-006`: Add failure-mode validation for KMS errors, IAM deny paths, repository timeouts, and invalid provider credentials.
