@@ -51,6 +51,14 @@ Sources:
 - [ ] `OPS-001`: Ensure provider-secret create and validation endpoints are covered by MVP edge rate-limit configuration.
 - [ ] `OPS-003`: Add metadata-only audit events for provider secret created, validated, expired, deleted, and denied access.
 
+## Milestone 9 Trusted-User Provider Access
+
+- [x] M9-T4: Add platform-owned provider credential loading from generic deployed secret references with fail-closed config validation.
+- [x] M9-T4: Add metadata-only platform provider availability/status responses that do not require user-pasted BYO keys by default.
+- [x] M9-T4: Keep BYO `SessionSecrets` optional, encrypted, TTL-bound, and metadata-only while platform access is the default configured path.
+- [x] M9-T4: Keep orchestration-facing provider access metadata free of raw secret values; plaintext is limited to the internal provider-call decrypt path.
+- [x] M9-T4: Add focused tests for missing platform secret reference, secret access denial, invalid provider credential/status, and metadata-only provider access responses.
+
 ## Quality And Production Tasks
 
 - [ ] Raise line coverage to at least 95%.

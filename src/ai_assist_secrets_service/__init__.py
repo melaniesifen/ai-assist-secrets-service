@@ -1,5 +1,15 @@
 from .errors import SecretError, SecretErrorCodes, forbidden, validation_failed
 from .fingerprint import HmacFingerprintHasher, create_hmac_fingerprint_hasher
+from .platform_provider_access import (
+    PLATFORM_CREDENTIAL_SOURCE,
+    PLATFORM_PROVIDER_DEFAULT_KEY,
+    PLATFORM_PROVIDER_SECRET_REF_PREFIX,
+    PlatformProviderAccessService,
+    PlatformProviderConfig,
+    PlatformProviderStatus,
+    SecretStoreAccessDenied,
+    platform_provider_config_from_env,
+)
 from .session_secrets import (
     DEFAULT_SESSION_SECRET_TTL_MS,
     MAX_SESSION_SECRET_TTL_MS,
@@ -18,12 +28,19 @@ from .session_secrets import (
 __all__ = [
     "DEFAULT_SESSION_SECRET_TTL_MS",
     "MAX_SESSION_SECRET_TTL_MS",
+    "PLATFORM_CREDENTIAL_SOURCE",
+    "PLATFORM_PROVIDER_DEFAULT_KEY",
+    "PLATFORM_PROVIDER_SECRET_REF_PREFIX",
     "SESSION_SECRET_PURPOSE",
     "HmacFingerprintHasher",
     "InMemorySessionSecretRepository",
+    "PlatformProviderAccessService",
+    "PlatformProviderConfig",
+    "PlatformProviderStatus",
     "ProviderSecretReadinessStatus",
     "SecretError",
     "SecretErrorCodes",
+    "SecretStoreAccessDenied",
     "SetupErrorCategories",
     "SessionSecretStatus",
     "SessionSecretValidationStatus",
@@ -33,5 +50,6 @@ __all__ = [
     "encryption_context",
     "forbidden",
     "metadata",
+    "platform_provider_config_from_env",
     "validation_failed",
 ]
