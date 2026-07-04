@@ -14,6 +14,8 @@ The service owns:
 - Metadata-only status responses.
 - Internal decrypt-by-reference for authorized provider call paths.
 - Explicit expire and delete behavior.
+- Platform-owned provider credential readiness with injected per-user
+  quota/audit checks for multi-user trusted dev.
 
 The service does not own:
 
@@ -40,6 +42,9 @@ The service does not own:
 - Expired secrets are rejected at read time even if the repository row still exists.
 - Delete and expiry clear ciphertext before later reads.
 - Encryption context includes `tenantId`, `userId`, `provider`, and `purpose=session-secret`.
+- Platform provider availability reports metadata-only quota/audit readiness;
+  missing metering configuration fails closed before a provider call can use a
+  deployment credential.
 
 ## Future Adapters
 

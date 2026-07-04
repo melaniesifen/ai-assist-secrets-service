@@ -23,10 +23,10 @@ PLATFORM_OPENAI_SECRET_VALUE = "platform-provider-credential-fixture"
 
 class PlatformProviderAccessTest(unittest.TestCase):
     def test_loads_platform_provider_credential_by_default_with_metadata_only_contract(self):
-        service, store, validator = create_platform_fixture()
+        service, store, validator = create_platform_fixture(require_metering=True)
 
-        status = service.get_provider_access_status()
-        access = service.resolve_provider_access()
+        status = service.get_provider_access_status(identity=identity(), request=request())
+        access = service.resolve_provider_access(identity=identity(), request=request())
         decrypted = service.decrypt_for_provider_call(
             provider="openai",
             secret_ref=access["secretRef"],
@@ -36,6 +36,10 @@ class PlatformProviderAccessTest(unittest.TestCase):
         self.assertEqual(status["credentialSource"], PLATFORM_CREDENTIAL_SOURCE)
         self.assertEqual(status["status"], PlatformProviderStatus.AVAILABLE)
         self.assertTrue(status["available"])
+        self.assertEqual(status["quotaDecision"], {"decision": "allow", "status": "ready"})
+        self.assertEqual(status["auditDecision"], {"decision": "recorded", "status": "ready"})
+        self.assertEqual(access["quotaDecision"], {"decision": "allow", "status": "ready"})
+        self.assertEqual(access["auditDecision"], {"decision": "recorded", "status": "ready"})
         self.assertEqual(access["secretRef"], PLATFORM_OPENAI_SECRET_REF)
         self.assertNotIn("secretValue", access)
         self.assertNotIn(PLATFORM_OPENAI_SECRET_VALUE, json.dumps(status))
@@ -45,6 +49,66 @@ class PlatformProviderAccessTest(unittest.TestCase):
         self.assertEqual(
             validator.requests,
             [{"provider": "openai", "secret_value": PLATFORM_OPENAI_SECRET_VALUE}] * 3,
+        )
+
+    def test_required_metering_fails_closed_without_quota_or_audit_checker(self):
+        service, _, _ = create_platform_fixture(require_metering=True, metering_checker=None)
+
+        status = service.get_provider_access_status(identity=identity(), request=request())
+
+        self.assertFalse(status["available"])
+        self.assertEqual(status["status"], PlatformProviderStatus.QUOTA_NOT_CONFIGURED)
+        self.assertEqual(
+            status["error"]["code"],
+            SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_NOT_CONFIGURED,
+        )
+        assert_secret_error(
+            self,
+            lambda: service.resolve_provider_access(identity=identity(), request=request()),
+            SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_NOT_CONFIGURED,
+            503,
+        )
+
+    def test_quota_denial_blocks_platform_provider_access_without_secret_leakage(self):
+        metering = FakeMeteringChecker(quota={"decision": "deny", "status": "limit_exceeded", "reasonCode": "USER_QUOTA_EXCEEDED"})
+        service, _, _ = create_platform_fixture(require_metering=True, metering_checker=metering)
+
+        status = service.get_provider_access_status(identity=identity(), request=request())
+
+        serialized = json.dumps(status)
+        self.assertFalse(status["available"])
+        self.assertEqual(status["status"], PlatformProviderStatus.QUOTA_DENIED)
+        self.assertEqual(status["quotaDecision"]["reasonCode"], "USER_QUOTA_EXCEEDED")
+        self.assertEqual(
+            status["error"]["code"],
+            SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_DENIED,
+        )
+        self.assertNotIn(PLATFORM_OPENAI_SECRET_REF, serialized)
+        self.assertNotIn(PLATFORM_OPENAI_SECRET_VALUE, serialized)
+        assert_secret_error(
+            self,
+            lambda: service.resolve_provider_access(identity=identity(), request=request()),
+            SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_DENIED,
+            429,
+        )
+        self.assertEqual(
+            metering.requests,
+            [{"identity": identity(), "provider": "openai", "request": request()}] * 2,
+        )
+
+    def test_audit_not_recorded_blocks_platform_provider_access(self):
+        service, _, _ = create_platform_fixture(
+            require_metering=True,
+            metering_checker=FakeMeteringChecker(audit={"decision": "not_configured", "status": "audit_not_ready"}),
+        )
+
+        status = service.get_provider_access_status(identity=identity(), request=request())
+
+        self.assertFalse(status["available"])
+        self.assertEqual(status["status"], PlatformProviderStatus.AUDIT_NOT_CONFIGURED)
+        self.assertEqual(
+            status["error"]["code"],
+            SecretErrorCodes.PLATFORM_PROVIDER_AUDIT_NOT_CONFIGURED,
         )
 
     def test_fails_closed_when_default_provider_secret_reference_is_missing(self):
@@ -143,9 +207,11 @@ class PlatformProviderAccessTest(unittest.TestCase):
         self.assertEqual(config.secret_refs["openai"], PLATFORM_OPENAI_SECRET_REF)
 
 
-def create_platform_fixture():
+def create_platform_fixture(*, require_metering=False, metering_checker="default"):
     store = FakeSecretStore({PLATFORM_OPENAI_SECRET_REF: PLATFORM_OPENAI_SECRET_VALUE})
     validator = FakeCredentialValidator()
+    if metering_checker == "default":
+        metering_checker = FakeMeteringChecker()
     service = PlatformProviderAccessService(
         config=PlatformProviderConfig(
             default_provider="openai",
@@ -153,8 +219,18 @@ def create_platform_fixture():
         ),
         secret_store=store,
         credential_validator=validator,
+        metering_checker=metering_checker,
+        require_metering=require_metering,
     )
     return service, store, validator
+
+
+def identity():
+    return {"tenantId": "tenant_001", "userId": "user_001"}
+
+
+def request():
+    return {"sessionId": "session_001", "requestId": "req_001", "correlationId": "corr_001"}
 
 
 class FakeSecretStore:
@@ -181,6 +257,22 @@ class FakeCredentialValidator:
         if self.raise_error:
             raise RuntimeError("validation unavailable")
         return {"valid": self.valid}
+
+
+class FakeMeteringChecker:
+    def __init__(self, *, quota=None, audit=None):
+        self.quota = quota or {"decision": "allow", "status": "ready"}
+        self.audit = audit or {"decision": "recorded", "status": "ready"}
+        self.requests = []
+
+    def check_provider_access(self, *, identity, provider, request):
+        self.requests.append({"identity": identity, "provider": provider, "request": request})
+        return {
+            "quotaDecision": self.quota,
+            "auditDecision": self.audit,
+            "secretRef": "must-not-leak",
+            "secretValue": "must-not-leak",
+        }
 
 
 if __name__ == "__main__":

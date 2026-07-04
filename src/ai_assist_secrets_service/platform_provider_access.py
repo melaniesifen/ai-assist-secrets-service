@@ -16,6 +16,9 @@ class PlatformProviderStatus:
     ACCESS_DENIED = "access_denied"
     INVALID = "invalid"
     VALIDATION_FAILED = "validation_failed"
+    QUOTA_DENIED = "quota_denied"
+    QUOTA_NOT_CONFIGURED = "quota_not_configured"
+    AUDIT_NOT_CONFIGURED = "audit_not_configured"
 
 
 class SecretStoreAccessDenied(Exception):
@@ -29,18 +32,32 @@ class PlatformProviderConfig:
 
 
 class PlatformProviderAccessService:
-    def __init__(self, *, config, secret_store, credential_validator=None):
+    def __init__(
+        self,
+        *,
+        config,
+        secret_store,
+        credential_validator=None,
+        metering_checker=None,
+        require_metering=False,
+    ):
         if not callable(getattr(secret_store, "get_secret_value", None)):
             raise TypeError("secret_store.get_secret_value is required.")
         if credential_validator is not None and not callable(
             getattr(credential_validator, "validate", None)
         ):
             raise TypeError("credential_validator.validate is required when provided.")
+        if metering_checker is not None and not callable(
+            getattr(metering_checker, "check_provider_access", None)
+        ):
+            raise TypeError("metering_checker.check_provider_access is required when provided.")
         self.config = _require_platform_provider_config(config)
         self.secret_store = secret_store
         self.credential_validator = credential_validator
+        self.metering_checker = metering_checker
+        self.require_metering = bool(require_metering)
 
-    def get_provider_access_status(self, *, provider=None):
+    def get_provider_access_status(self, *, provider=None, identity=None, request=None):
         normalized_provider = self._provider_or_default(provider)
         secret_ref = self.config.secret_refs.get(normalized_provider)
         if secret_ref is None:
@@ -64,14 +81,22 @@ class PlatformProviderAccessService:
             raise _access_denied(normalized_provider, secret_ref, cause) from cause
         if validation_error is not None:
             return validation_error
+        metering_error, metering = self._metering_decision(
+            provider=normalized_provider,
+            identity=identity,
+            request=request,
+        )
+        if metering_error is not None:
+            return metering_error
         return _status(
             provider=normalized_provider,
             status=PlatformProviderStatus.AVAILABLE,
             secretRef=secret_ref,
+            **metering,
         )
 
-    def resolve_provider_access(self, *, provider=None):
-        status = self.get_provider_access_status(provider=provider)
+    def resolve_provider_access(self, *, provider=None, identity=None, request=None):
+        status = self.get_provider_access_status(provider=provider, identity=identity, request=request)
         if status["status"] != PlatformProviderStatus.AVAILABLE:
             raise _not_available(status)
         return {
@@ -80,6 +105,8 @@ class PlatformProviderAccessService:
             "secretRef": status["secretRef"],
             "available": True,
             "status": status["status"],
+            "quotaDecision": status.get("quotaDecision"),
+            "auditDecision": status.get("auditDecision"),
         }
 
     def decrypt_for_provider_call(self, *, provider=None, secret_ref=None):
@@ -155,6 +182,56 @@ class PlatformProviderAccessService:
             )
         return None
 
+    def _metering_decision(self, *, provider, identity, request):
+        if self.metering_checker is None:
+            if not self.require_metering:
+                return None, {}
+            return _metering_not_ready(provider), {}
+        try:
+            result = self.metering_checker.check_provider_access(
+                identity=identity,
+                provider=provider,
+                request=request or {},
+            )
+        except Exception:
+            return _metering_not_ready(provider), {}
+        if not isinstance(result, Mapping):
+            return _metering_not_ready(provider), {}
+        quota = result.get("quotaDecision") if isinstance(result.get("quotaDecision"), Mapping) else {}
+        audit = result.get("auditDecision") if isinstance(result.get("auditDecision"), Mapping) else {}
+        if _normalized_decision(quota.get("decision")) != "allow":
+            status = PlatformProviderStatus.QUOTA_DENIED if _normalized_decision(quota.get("decision")) == "deny" else PlatformProviderStatus.QUOTA_NOT_CONFIGURED
+            code = SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_DENIED if status == PlatformProviderStatus.QUOTA_DENIED else SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_NOT_CONFIGURED
+            return _status(
+                provider=provider,
+                status=status,
+                quotaDecision=_safe_decision(quota),
+                auditDecision=_safe_decision(audit),
+                error=_platform_error(
+                    code=code,
+                    message="Platform provider quota is not available.",
+                    http_status=429 if status == PlatformProviderStatus.QUOTA_DENIED else 503,
+                    target="platformProviderQuota",
+                ),
+            ), {}
+        if _normalized_decision(audit.get("decision")) != "recorded":
+            return _status(
+                provider=provider,
+                status=PlatformProviderStatus.AUDIT_NOT_CONFIGURED,
+                quotaDecision=_safe_decision(quota),
+                auditDecision=_safe_decision(audit),
+                error=_platform_error(
+                    code=SecretErrorCodes.PLATFORM_PROVIDER_AUDIT_NOT_CONFIGURED,
+                    message="Platform provider audit recording is not available.",
+                    http_status=503,
+                    target="platformProviderAudit",
+                ),
+            ), {}
+        return None, {
+            "quotaDecision": _safe_decision(quota),
+            "auditDecision": _safe_decision(audit),
+        }
+
 
 def platform_provider_config_from_env(env):
     if not isinstance(env, Mapping):
@@ -202,25 +279,27 @@ def _require_platform_provider_config(config):
     )
 
 
-def _status(*, provider, status, secretRef=None, error=None):
+def _status(*, provider, status, secretRef=None, error=None, quotaDecision=None, auditDecision=None):
     return {
         "provider": provider,
         "credentialSource": PLATFORM_CREDENTIAL_SOURCE,
         "available": status == PlatformProviderStatus.AVAILABLE,
         "status": status,
         **({} if secretRef is None else {"secretRef": secretRef}),
+        **({} if quotaDecision is None else {"quotaDecision": quotaDecision}),
+        **({} if auditDecision is None else {"auditDecision": auditDecision}),
         **({} if error is None else {"error": error}),
     }
 
 
-def _platform_error(*, code, message, http_status, retryable=False):
+def _platform_error(*, code, message, http_status, retryable=False, target="platformProviderSecret"):
     return {
         "code": code,
         "category": "DEPENDENCY",
         "message": message,
         "retryable": retryable,
         "httpStatus": http_status,
-        "target": "platformProviderSecret",
+        "target": target,
     }
 
 
@@ -253,3 +332,31 @@ def _not_available(status):
         status=error.get("httpStatus", 503),
         details={"provider": status["provider"], "status": status["status"]},
     )
+
+
+def _metering_not_ready(provider):
+    return _status(
+        provider=provider,
+        status=PlatformProviderStatus.QUOTA_NOT_CONFIGURED,
+        error=_platform_error(
+            code=SecretErrorCodes.PLATFORM_PROVIDER_QUOTA_NOT_CONFIGURED,
+            message="Platform provider quota is not configured.",
+            http_status=503,
+            target="platformProviderQuota",
+        ),
+    )
+
+
+def _safe_decision(decision):
+    return {
+        key: value
+        for key, value in dict(decision).items()
+        if key in {"decision", "status", "reasonCode", "retryAfterSeconds"}
+    }
+
+
+def _normalized_decision(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return normalized or None

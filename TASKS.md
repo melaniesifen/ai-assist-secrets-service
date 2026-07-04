@@ -61,12 +61,12 @@ Sources:
 
 ## Milestone 11 Real User Isolation
 
-- [ ] M11-T4: Treat platform provider credentials as deployment-owned
+- [x] M11-T4: Treat platform provider credentials as deployment-owned
   platform-metered access, not the owner's personal provider token.
-- [ ] M11-T4: Expose metadata-only provider availability and quota/audit
+- [x] M11-T4: Expose metadata-only provider availability and quota/audit
   readiness for the derived `tenantId` and `userId`; missing multi-user quota or
   audit configuration must fail closed before provider calls.
-- [ ] M11-T4: Keep BYO `SessionSecrets` optional and explicit; when enabled,
+- [x] M11-T4: Keep BYO `SessionSecrets` optional and explicit; when enabled,
   prove users cannot list, decrypt, validate, or spend another user's provider
   secret.
 
