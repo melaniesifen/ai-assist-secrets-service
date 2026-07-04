@@ -59,6 +59,17 @@ Sources:
 - [x] M9-T4: Keep orchestration-facing provider access metadata free of raw secret values; plaintext is limited to the internal provider-call decrypt path.
 - [x] M9-T4: Add focused tests for missing platform secret reference, secret access denial, invalid provider credential/status, and metadata-only provider access responses.
 
+## Milestone 11 Real User Isolation
+
+- [ ] M11-T4: Treat platform provider credentials as deployment-owned
+  platform-metered access, not the owner's personal provider token.
+- [ ] M11-T4: Expose metadata-only provider availability and quota/audit
+  readiness for the derived `tenantId` and `userId`; missing multi-user quota or
+  audit configuration must fail closed before provider calls.
+- [ ] M11-T4: Keep BYO `SessionSecrets` optional and explicit; when enabled,
+  prove users cannot list, decrypt, validate, or spend another user's provider
+  secret.
+
 ## Milestone 10 Dogfood Runtime Handler
 
 - [x] M10 dogfood / EVT-001: expose package-level `http_app.handle_http_request` for provider-secret dogfood routes with safe auth validation, metadata-only platform provider status when configured, no-store responses, and structured dependency/config errors for BYO create/delete until deployed encrypted persistence and KMS backing are available.
